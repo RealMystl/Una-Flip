@@ -18,7 +18,7 @@ local currentPlayer = nil
 local currentColor = 0
 local playerDroppingCard = ''
 local lastCardIndexDropped = 0
-local nextCard = math.random(Card.lastCardId)
+local nextCard = Card.getRandomCard()
 local drawCardsCount = 0
 local bitFlags = 0
 local drawToMatchCard = 0
@@ -329,7 +329,7 @@ function Sync.drawCard(name, card)
    updateGameState()
    if not card then
       card = nextCard
-      nextCard = math.random(Card.lastCardId)
+      nextCard = Card.getRandomCard()
    end
    table.insert(players[name].cards, card)
    Sync.events.CARD_DRAWED(name, card)
@@ -557,7 +557,7 @@ local function unaSync(encoded)
    playersOrder = {}
    local newPlayers = {}
    local newCards = {} ---@type {[string]: number[]}
-   for name, rot, cards in encoded:sub(14, -1):gmatch('([^\0]*)\0(..)([^\0]*)\0') do
+   for name, rot, cards in encoded:sub(16, -1):gmatch('([^\0]*)\0(..)([^\0]*)\0') do
       local playerData = players[name]
       if not playerData then
          playerData = {cards = {}} -- init player
@@ -572,7 +572,11 @@ local function unaSync(encoded)
       end
       playerData.rot = (decodeShort(rot) / 65536 * 360) % 360
       -- set cards
-      newCards[name] = {cards:byte(1, -1)}
+      local parsedCards = {}
+      for i = 1, #cards, 2 do
+         parsedCards[(i + 1) / 2] = cards:byte(i) + cards:byte(i + 1) * 256
+      end
+      newCards[name] = parsedCards
    end
    -- read variables
    Sync.setCurrentPlayer(encoded:byte(2), true)
@@ -580,12 +584,11 @@ local function unaSync(encoded)
    Sync.setColor(encoded:byte(3), true)
    playerDroppingCard = playersOrder[encoded:byte(4)] or ''
    lastCardIndexDropped = decodeShort(encoded:sub(5, 6))
-   nextCard = encoded:byte(7)
-   Sync.setDrawCardsCount(decodeShort(encoded:sub(8, 9)), true)
-   Sync.setDrawToMatchCard(encoded:byte(12), true)
+   nextCard = decodeShort(encoded:sub(7, 8))
+   Sync.setDrawCardsCount(decodeShort(encoded:sub(9, 10)), true)
    -- set bit flags
    local oldBitFlags = bitFlags
-   bitFlags = decodeShort(encoded:sub(10, 11))
+   bitFlags = decodeShort(encoded:sub(11, 12))
    for i = 0, 15 do
       local n = 2 ^ i
       local state = bit32.btest(n, bitFlags)
@@ -593,6 +596,7 @@ local function unaSync(encoded)
          Sync.events.BIT_FLAG_CHANGE(i, state)
       end
    end
+   Sync.setDrawToMatchCard(decodeShort(encoded:sub(13, 14)), true)
    -- new players
    for _, name in ipairs(newPlayers) do
       Sync.events.PLAYER_JOIN(name)
@@ -642,7 +646,7 @@ function pings.unaGame_sync(encoded, newPosX, newPosY, newPosZ)
       return
    end
    if host:isHost() then
-      local newSyncId = encoded:byte(13)
+      local newSyncId = encoded:byte(15)
       local diff = (syncId - newSyncId + 128) % 256 - 128
       if diff >= 1 then
          return
@@ -668,7 +672,7 @@ local function encodePlayer(tbl, name)
    local playerData = players[name]
    table.insert(tbl, encodeShort((playerData.rot % 360) / 360 * 65536))
    for _, card in ipairs(playerData.cards) do
-      table.insert(tbl, string.char(card))
+      table.insert(tbl, string.char(card % 256, math.floor(card / 256)))
    end
    table.insert(tbl, '\0') -- cards ending
 end
@@ -685,10 +689,10 @@ local function encodeSyncPing()
    table.insert(tbl, string.char(currentColor))
    table.insert(tbl, string.char(players[playerDroppingCard] and players[playerDroppingCard].position or 0))
    table.insert(tbl, encodeShort(lastCardIndexDropped))
-   table.insert(tbl, string.char(nextCard))
+   table.insert(tbl, encodeShort(nextCard))
    table.insert(tbl, encodeShort(drawCardsCount))
    table.insert(tbl, encodeShort(bitFlags))
-   table.insert(tbl, string.char(drawToMatchCard))
+   table.insert(tbl, encodeShort(drawToMatchCard))
    table.insert(tbl, string.char(syncId))
    -- write players
    for i, name in ipairs(playersOrder) do

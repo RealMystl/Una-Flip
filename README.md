@@ -42,7 +42,7 @@ Base Una Scripting done by [GN](https://github.com/GN68), [Auria](https://github
 
 Base Una Models and textures done by [Toast](https://github.com/toasttextures)
 
-Una Flip Scripting done by Granbull (bim)
+Una Flip Scripting done by [Granbull (bim)](https://github.com/Granbull)
 
 Una Flip textures done by [RealMystl](https://github.com/RealMystl)
 

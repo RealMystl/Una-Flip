@@ -60,6 +60,7 @@ local iconUV = {
 	vec(27, 22), -- DRAW4   
 	vec(36, 22), -- WILD    
 	vec(45,  0), -- UNKNOWN 
+	vec(36, 33), -- FLIP   
 }
 ---@alias CardType
 ---| "EMPTY"
@@ -79,6 +80,7 @@ local iconUV = {
 ---| "DRAW4"
 ---| "WILD"
 ---| "UNKNOWN"
+---| "FLIP"
 
 local index2color = {
 	"RED",
@@ -106,6 +108,7 @@ local index2type = {
 	"DRAW4",
 	"WILD",
 	"UNKNOWN",
+	"FLIP",
 }
 
 local color2index = {}
@@ -118,22 +121,34 @@ for i, type in ipairs(index2type) do
 end
 
 CardAPI.lastCardId = #index2color * #index2type
+CardAPI.FLIP_OFFSET = 100
 
 ---converts full card id to color and type ids
 ---@param id number
 ---@return number # type
 ---@return number # color
+---@return boolean # isFlipped
 function CardAPI.fullIdToTypeAndColor(id)
-   id = id - 1
-   return id % #index2type + 1, math.floor(id / #index2type) + 1
+	local isFlipped = false
+	if id > CardAPI.FLIP_OFFSET then
+		isFlipped = true
+		id = id - CardAPI.FLIP_OFFSET
+	end
+	id = id - 1
+	return id % #index2type + 1, math.floor(id / #index2type) + 1, isFlipped
 end
 
 ---converts card type and color to full id
 ---@param cardType number
 ---@param color number
+---@param isFlipped boolean?
 ---@return number
-function CardAPI.typeAndColorToFullId(cardType, color)
-   return (cardType - 1) + #index2type * (color - 1) + 1
+function CardAPI.typeAndColorToFullId(cardType, color, isFlipped)
+	local id = (cardType - 1) + #index2type * (color - 1) + 1
+	if isFlipped then
+		id = id + CardAPI.FLIP_OFFSET
+	end
+	return id
 end
 
 ---@param id integer?
@@ -168,25 +183,63 @@ function CardAPI.typeToIndex(type)
 end
 
 local randomCardList = {}
+local randomRegularCardList = {}
+
 for color = 1, 4 do
-	for cardType = 2, 14 do
+	-- Numbers 1-9 (types 3 to 11), 2 of each per color
+	for cardType = 3, 11 do
 		local id = CardAPI.typeAndColorToFullId(cardType, color)
 		table.insert(randomCardList, id)
-		table.insert(randomCardList, id) -- give higher chance to colorful cards
+		table.insert(randomCardList, id)
+		
+		table.insert(randomRegularCardList, id)
+		table.insert(randomRegularCardList, id)
 	end
+	
+	-- Action cards: Reverse(12), Skip(13), Draw(14), Flip(18)
+	-- 2 of each per color
+	local actionTypes = {12, 13, 14, 18}
+	for _, cardType in ipairs(actionTypes) do
+		local id = CardAPI.typeAndColorToFullId(cardType, color)
+		table.insert(randomCardList, id)
+		table.insert(randomCardList, id)
+	end
+	
+	-- Wild cards (15 and 16). 4 of each in the whole deck.
+	-- Looping 4 times (color 1-4), adding 1 per loop with color 5 yields 4 of each.
 	table.insert(randomCardList, CardAPI.typeAndColorToFullId(15, 5))
 	table.insert(randomCardList, CardAPI.typeAndColorToFullId(16, 5))
 end
 
 ---@return number
 function CardAPI.getRandomCard()
-	return randomCardList[math.random(#randomCardList)]
+	local lightId, darkId
+	local lightType, darkType
+	
+	repeat
+		lightId = randomCardList[math.random(#randomCardList)]
+		darkId = randomCardList[math.random(#randomCardList)]
+		
+		lightType = CardAPI.fullIdToTypeAndColor(lightId)
+		darkType = CardAPI.fullIdToTypeAndColor(darkId)
+		
+		if lightType == 18 then
+			darkId = randomRegularCardList[math.random(#randomRegularCardList)]
+			darkType = CardAPI.fullIdToTypeAndColor(darkId)
+		elseif darkType == 18 then
+			lightId = randomRegularCardList[math.random(#randomRegularCardList)]
+			lightType = CardAPI.fullIdToTypeAndColor(lightId)
+		end
+	until lightType ~= darkType
+	
+	darkId = darkId + CardAPI.FLIP_OFFSET
+	return lightId + darkId * 256
 end
 
 ---@param id integer
 ---@return boolean
 function CardAPI.isValidCardId(id)
-	return id >= 1 and id <= CardAPI.lastCardId
+	return id ~= nil and id > 0
 end
 
 CardAPI.CARD_PRESSED = Event.new()
@@ -280,7 +333,7 @@ function Card:setColor(color)
 		error('card color "' .. color .. '" dosent exist', 1)
 	end
 	self.color = color
-	self.model2.Background:setUVPixels(colorUV[color])
+	self.model2.Background:setUV(colorUV[color] / 64)
 	return self
 end
 
@@ -299,10 +352,26 @@ function Card:setType(type)
 		error('card type "' .. type .. '" dosent exist', 1)
 	end
 	self.type = type
-	self.model2.numbers:setUVPixels(iconUV[type])
+	self.model2.numbers:setUV(iconUV[type] / 64)
+	--self.model.TopNumber:setUV(iconUV[type] / 64)
+	--self.model.BottomNumber:setUV(iconUV[type] / 64)
 	return self
 end
 
+---@param flipped boolean
+---@return Card
+function Card:setFlipped(flipped)
+	self.flipped = flipped
+	local tex = flipped and textures["una.atlas_flip"] or textures["una.atlas"]
+	if tex then
+		self.model2.Background:setPrimaryTexture("Custom", tex)
+		self.model2.numbers:setPrimaryTexture("Custom", tex)
+		self.model2.Icon:setPrimaryTexture("Custom", tex)
+		self.model2.Outline:setPrimaryTexture("Custom", tex)
+		self.model2.Circle:setPrimaryTexture("Custom", tex)
+	end
+	return self
+end
 
 --- snippet by @PenguinEncounter
 ---@param mat Matrix4|Matrix3

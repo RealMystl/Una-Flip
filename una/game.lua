@@ -56,9 +56,9 @@ local function removeCard(card)
 end
 
 local gameSettings = {
-	{name = "+2 on +4\nstacking", bit = 0, default = true},
-	{name = "+4 on +2\nstacking", bit = 1, default = true},
 	{name = "require\nplaying\ndrawed\ncard", bit = 2, default = true},
+	{name = "see\nopponent\nflip side", bit = 4, default = false},
+	{name = "allow\ncard\nstacking", bit = 5, default = true},
 }
 
 --[[
@@ -503,14 +503,26 @@ local sceneGame = Macro.new(function (events, ...)
 	---@param card Card
 	---@param cardId number
 	local function setCardStyle(name, card, cardId)
+		local isFlipped = Sync.getBitFlag(3)
+		local activeId = isFlipped and math.floor(cardId / 256) or (cardId % 256)
+		local inactiveId = isFlipped and (cardId % 256) or math.floor(cardId / 256)
 		if name == viewerName or name == "!" then
-			local type, color = Card.fullIdToTypeAndColor(cardId)
+			local type, color, isFlippedCard = Card.fullIdToTypeAndColor(activeId)
 			card:setType(type)
 				:setColor(color)
+				:setFlipped(isFlippedCard)
 			return
 		end
-		card:setType(17)
-			:setColor(5)
+		if Sync.getBitFlag(4) then
+			local type, color, isFlippedCard = Card.fullIdToTypeAndColor(inactiveId)
+			card:setType(type)
+				:setColor(color)
+				:setFlipped(isFlippedCard)
+		else
+			card:setType(17)
+				:setColor(5)
+				:setFlipped(not isFlipped)
+		end
 	end
 
 	local function reversePlayersOrder()
@@ -533,9 +545,11 @@ local sceneGame = Macro.new(function (events, ...)
 			return
 		end
 		local card = inv[cardId][#inv[cardId]]
-		local type, color = Card.fullIdToTypeAndColor(cardId)
+		local isFlipped = Sync.getBitFlag(3)
+		local activeId = isFlipped and math.floor(cardId / 256) or (cardId % 256)
+		local type, color = Card.fullIdToTypeAndColor(activeId)
 		local currentColor = Sync.getColor()
-		if color == 5 and currentColor < 100 then
+		if color == 5 and currentColor ~= 6 and currentColor ~= 254 then
 			card:setColor(currentColor)
 		end
 	end
@@ -681,35 +695,66 @@ local sceneGame = Macro.new(function (events, ...)
 	---@param cardId integer
 	---@return boolean?
 	local function dropCard(cardId)
+		local isFlipped = Sync.getBitFlag(3)
+		local activeId = isFlipped and math.floor(cardId / 256) or (cardId % 256)
 		-- decide if card can be dropped
 		local cardsStack = Sync.getRawCards("!")
 		local topCard = cardsStack[#cardsStack]
-		local topType,topColor = Card.fullIdToTypeAndColor(topCard)
-		local cardType,color = Card.fullIdToTypeAndColor(cardId)
+		local activeTopId = isFlipped and math.floor(topCard / 256) or (topCard % 256)
+		local topType,topColor = Card.fullIdToTypeAndColor(activeTopId)
+		local cardType,color = Card.fullIdToTypeAndColor(activeId)
 		local currentColor = Sync.getColor()
-		if currentColor == 254 then
+		
+		local pickingColorState = isFlipped and 254 or 6
+		if currentColor == pickingColorState then
 			return
 		end
 		if not (color == 5 or color == currentColor or topType == cardType) then
 			return
 		end
 		local drawCards = 0
-		if cardType == 14 then
-			drawCards = 2
-		elseif cardType == 15 then
-			drawCards = 4
-		end
-		if Sync.getDrawCardsCount() >= 1 then
-			if drawCards == 0 then
-				return
-			end
-			if not Sync.getBitFlag(0) then -- +2 on +4
-				if cardType == 14 and topType == 15 then
+		
+		-- TO-DO: Reimplement this later, as apparently the homebrew rules don't use the challenging system on +2 wild/color wild 
+		--[[if cardType == 15 then
+			local currentPlayer = Sync.getCurrentPlayer()
+			local rawCards = Sync.getRawCards(currentPlayer)
+			for _, cid in ipairs(rawCards) do
+				local cActiveId = isFlipped and math.floor(cid / 256) or (cid % 256)
+				local _, cColor = Card.fullIdToTypeAndColor(cActiveId)
+				if cColor == currentColor then
 					return
 				end
 			end
-			if not Sync.getBitFlag(1) then -- +4 on +2
-				if cardType == 15 and topType == 14 then
+		end]]
+
+		if isFlipped then
+			if cardType == 14 then
+				drawCards = 5
+			elseif cardType == 15 then
+				drawCards = 999
+			end
+			if Sync.getDrawCardsCount() >= 1 then
+				if not Sync.getBitFlag(5) then
+					return
+				end
+				if drawCards == 0 then
+					return
+				end
+				if cardType == 15 or topType == 15 then
+					return
+				end
+			end
+		else
+			if cardType == 14 then
+				drawCards = 1
+			elseif cardType == 15 then
+				drawCards = 2
+			end
+			if Sync.getDrawCardsCount() >= 1 then
+				if not Sync.getBitFlag(5) then
+					return
+				end
+				if drawCards == 0 then
 					return
 				end
 			end
@@ -726,14 +771,28 @@ local sceneGame = Macro.new(function (events, ...)
 				reversePlayersOrder()
 			end
 		end
+		if cardType == 18 then -- FLIP
+			isFlipped = not isFlipped
+			if host:isHost() then
+				Sync.setBitFlag(3, isFlipped)
+			end
+			activeId = isFlipped and math.floor(cardId / 256) or (cardId % 256)
+			cardType, color = Card.fullIdToTypeAndColor(activeId)
+		end
 		if color == 5 then
-			Sync.setColor(254)
+			Sync.setColor(isFlipped and 254 or 6)
 		else
 			Sync.setColor(color)
 			nextPlayer()
 		end
 		if isSkip then
-			nextPlayer()
+			if isFlipped then
+				for _ = 1, Sync.getPlayersCount() - 1 do
+					nextPlayer()
+				end
+			else
+				nextPlayer()
+			end
 		end
 		if drawCards >= 1 then
 			Sync.setDrawCardsCount(Sync.getDrawCardsCount() + drawCards)
@@ -751,6 +810,7 @@ local sceneGame = Macro.new(function (events, ...)
 			:setRot(0, 0, 180)
 			:setType(17)
 			:setColor(5)
+			:setFlipped(Sync.getBitFlag(3))
 			:setTag("gameCard")
 			:setId("card;;-1")
 
@@ -760,8 +820,10 @@ local sceneGame = Macro.new(function (events, ...)
 		card.PRESSED:register(function(name)
 			if Sync.getCurrentPlayer() ~= name then
 				return
-				end
-			if Sync.getColor() == 254 then
+			end
+			local isFlipped = Sync.getBitFlag(3)
+			local pickingColorState = isFlipped and 254 or 6
+			if Sync.getColor() == pickingColorState then
 				return
 			end
 			if Card.isValidCardId(Sync.getDrawToMatchCard()) then
@@ -772,12 +834,35 @@ local sceneGame = Macro.new(function (events, ...)
 			if drawCardsCount >= 1 then
 				-- drawing multiple cards can get desynced, so its done only on hot and then sent
 				if host:isHost() then
-					for _ = 1, drawCardsCount do
-						Sync.drawCard(name)
+					local untilColorCount = math.floor(drawCardsCount / 999)
+					local normalDrawCount = drawCardsCount % 999
+					
+					if untilColorCount > 0 then
+						local targetColor = Sync.getColor()
+						local drawnCard = Card.getRandomCard()
+						local activeDrawnId = isFlipped and math.floor(drawnCard / 256) or (drawnCard % 256)
+						local _, cColor = Card.fullIdToTypeAndColor(activeDrawnId)
+						Sync.drawCard(name, drawnCard)
+						
+						if cColor == targetColor then
+							untilColorCount = untilColorCount - 1
+						end
+					end
+					
+					if untilColorCount == 0 and normalDrawCount > 0 then
+						for _ = 1, normalDrawCount do
+							Sync.drawCard(name)
+						end
+						normalDrawCount = 0
+					end
+					
+					local newCount = untilColorCount * 999 + normalDrawCount
+					Sync.setDrawCardsCount(newCount)
+					
+					if newCount == 0 then
+						nextPlayer()
 					end
 				end
-				Sync.setDrawCardsCount(0)
-				nextPlayer()
 				return
 			end
 			local nextCard = Sync.getNextCard()
@@ -815,7 +900,7 @@ local sceneGame = Macro.new(function (events, ...)
 	local function hasAnyCardsCheck()
 		local currentPlayer = Sync.getCurrentPlayer()
 		local currentColor = Sync.getColor()
-		local isSpecialColor = currentColor == 5 or currentColor == 254
+		local isSpecialColor = currentColor == 5 or currentColor == 6 or currentColor == 254
 		for _, name in pairs(Sync.getPlayersOrder()) do
 			if #Sync.getRawCards(name) == 0 then
 				if currentPlayer ~= name or not isSpecialColor then
@@ -868,9 +953,9 @@ local sceneGame = Macro.new(function (events, ...)
 			if not card then
 				card = Card.new()
 				card:setTag("gameCard")
-				setCardStyle(name, card, cardId)
 				table.insert(inv[cardId], card)
 			end
+			setCardStyle(name, card, cardId)
 				-- local oldPos = card.pos
 				-- local newPos = vec(i * 0.5, 0.5, 0.5)
 				-- card:setPos(i * 0.5, 0.5, 0)
@@ -898,6 +983,11 @@ local sceneGame = Macro.new(function (events, ...)
 				targetRot = vec(-90, playerRot - math.deg(cardRot) - 90, 0)
 				if rowSize ~= 1 then
 					targetRot.y = targetRot.y - 10
+				end
+				if name ~= viewerName then
+					if Sync.getBitFlag(4) then
+						targetRot.y = targetRot.y + 180
+					end
 				end
 			end
 
@@ -1026,7 +1116,8 @@ local sceneGame = Macro.new(function (events, ...)
 
 	Sync.events.CARD_DRAWED:register(function(name, cardId)
 		if host:isHost() then
-			Sync.setNextCard(Card.getRandomCard())
+			local nextCard = Card.getRandomCard()
+			Sync.setNextCard(nextCard)
 		end
 		drawCardToPlayer(name, cardId)
 		if name == "!" then
@@ -1113,7 +1204,8 @@ local sceneGame = Macro.new(function (events, ...)
 			}
 		end
 		colorChoiceCards = {}
-		if color ~= 254 then
+		local pickingColorState = Sync.getBitFlag(3) and 254 or 6
+		if color ~= pickingColorState then
 			return
 		end
 		for i = 1, 4 do
@@ -1125,6 +1217,7 @@ local sceneGame = Macro.new(function (events, ...)
 			local pos = vec(-x * 0.75 * scale, 0, -y * scale) * 1.1
 			card:setColor(i)
 				:setType(1)
+				:setFlipped(Sync.getBitFlag(3))
 				:setOwner(Sync.getCurrentPlayer())
 				:setId('card;;-'..(i + 20))
 			colorChoiceCards[i] = card
@@ -1149,7 +1242,16 @@ local sceneGame = Macro.new(function (events, ...)
 
 	Sync.events.DRAW_CARDS_COUNT_CHANGE:register(function(new, old)
 		if new >= 1 then
-			drawCardsCountText:setText("+"..new)
+			local untilColorCount = math.floor(new / 999)
+			local normalDrawCount = new % 999
+			local text = ""
+			if untilColorCount > 0 then
+				text = untilColorCount > 1 and (untilColorCount .. "xColor") or "Color"
+			end
+			if normalDrawCount > 0 then
+				text = text .. (text ~= "" and "\n+" or "+") .. normalDrawCount
+			end
+			drawCardsCountText:setText(text)
 		end
 		local from, to = 0.6, 0.5
 		if old == 0 then
@@ -1178,17 +1280,60 @@ local sceneGame = Macro.new(function (events, ...)
 	if host:isHost() then
 		local color = math.random(1, 4)
 		local cardType = math.random(2, 11)
+		local lightId = Card.typeAndColorToFullId(cardType, color)
+		local darkId = math.floor(Card.getRandomCard() / 256)
+		local cardId = lightId + darkId * 256
 		Sync.drawCard(
 			"!",
-			Card.typeAndColorToFullId(
-				cardType,
-				color
-			)
+			cardId
 		)
 		Sync.setColor(color)
+		Sync.setBitFlag(3, false)
 	end
 
 	Sync.events.BIT_FLAG_CHANGE:register(function(bit, state)
+		if bit == 3 and drawCard then
+			drawCard:setFlipped(state)
+		end
+		if bit == 3 or bit == 4 then
+			for _, name in ipairs(Sync.getPlayersOrder()) do
+				requestCardUpdate(name)
+			end
+			requestCardUpdate("!")
+			updateTopCardColor()
+			if drawToMatchCard then
+				local dtmId = Sync.getDrawToMatchCard()
+				setCardStyle(Sync.getCurrentPlayer(), drawToMatchCard, dtmId)
+			end
+		end
+		if bit == 3 then
+			local function flipAnim(card)
+				local targetRot = card.animRot:copy()
+				local axis = math.abs(card.rot.x) > 45 and "z" or "x"
+				Tween.new{
+					id = "una.flipAnim." .. card.idx,
+					duration = 0.5,
+					from = 180,
+					to = 0,
+					easing = "outBack",
+					tick = function(v)
+						if axis == "z" then
+							card:setAnimRot(targetRot.x, targetRot.y, targetRot.z + v)
+						else
+							card:setAnimRot(targetRot.x + v, targetRot.y, targetRot.z)
+						end
+					end,
+					onFinish = function()
+						card:setAnimRot(targetRot)
+					end
+				}
+			end
+
+			Card.applyToCardWithTag("gameCard", flipAnim)
+			if drawToMatchCard then
+				flipAnim(drawToMatchCard)
+			end
+		end
 	end, "gameBitFlagChange")
 
 	Sync.events.DRAW_TO_MATCH_CHANGE:register(function(cardId)
@@ -1208,6 +1353,11 @@ local sceneGame = Macro.new(function (events, ...)
 			local offset = vectors.rotateAroundAxis(playerRot, vec(0, 0, cardsRadius), vec(0, 1, 0))
 			local angle = math.deg(math.atan2(offset.x, offset.z + 1)) - 90
 			local rot = vec(-90, angle, 0)
+			if currentPlayer ~= viewerName then
+				if Sync.getBitFlag(4) then
+					rot.y = rot.y + 180
+				end
+			end
 			Tween.new{
 				duration = 0.5,
 				from = 0,
@@ -1236,7 +1386,8 @@ local sceneGame = Macro.new(function (events, ...)
 	if host:isHost() then
 		for i, name in ipairs(Sync.getPlayersOrder()) do
 			for k = 1, 7, 1 do
-				Sync.drawCard(name, Card.getRandomCard())
+				local cardId = Card.getRandomCard()
+				Sync.drawCard(name, cardId)
 			end
 			-- Sync.drawCard(name, Card.typeAndColorToFullId(15, 5))
 			-- Sync.drawCard(name, Card.typeAndColorToFullId(14, 5))
@@ -1274,11 +1425,15 @@ local sceneGame = Macro.new(function (events, ...)
 		for i = 0, 1, 0.1 do
 			local y = i * 0.323
 			local card = Card.new()
-			local cardType, color = Card.fullIdToTypeAndColor(Card.getRandomCard())
+			local cardId = Card.getRandomCard()
+			local isFlipped = Sync.getBitFlag(3)
+			local activeId = isFlipped and math.floor(cardId / 256) or (cardId % 256)
+			local cardType, color, isFlippedCard = Card.fullIdToTypeAndColor(activeId)
 			card:setPos(-1, y, 0)
 				:setRot(0, 0, 180)
 				:setType(cardType)
 				:setColor(color)
+				:setFlipped(isFlippedCard)
 			Throwable.new(card)
 		end
 		cardStackModel:setVisible(false)

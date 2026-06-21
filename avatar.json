@@ -1,11 +1,10 @@
 {
-	"name": "UNA",
-	"description": "UNOrginal? card game",
+	"name": "UNA FLIP",
+	"description": "Flip the Deck, Change the Game!",
 	"authors": [
-		"GNanimates",
-		"AuriaFoxGirl",
-		"§f§nArtist§r",
-		"ToastTextures"
+		"Granbull (bim), GNanimates [Base], AuriaFoxGirl [Base]",
+		"§f§nArtists§r",
+		"RealMystl, ToastTextures [Base]"
 	],
 	"color": "#ffeb57",
 	"badge_color_donator": "#ffeb57"

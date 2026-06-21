@@ -46,7 +46,9 @@ Una Flip Scripting done by Granbull (bim)
 
 Una Flip textures done by [RealMystl](https://github.com/RealMystl)
 
-## Source: [Link](https://github.com/lua-gods/una)
+## Base UNA Source: [Link](https://github.com/lua-gods/una)
+
+## Una Flip Source: [Link](https://github.com/RealMystl/Una-Flip)
 
 ## To download:
 

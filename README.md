@@ -1,29 +1,56 @@
-# Una
-<img width="1920" height="960" alt="Una_Flip" src="https://github.com/user-attachments/assets/aa55b525-eb49-4a4f-ba63-2bd56103bdaa" />
+# Una Flip
 
-Everyone has UNA, it came free with your Figura instance!
+<img width="1920" height="960" alt="Una\_Flip" src="https://github.com/user-attachments/assets/aa55b525-eb49-4a4f-ba63-2bd56103bdaa" />
 
-I mean it's literally just a card game go play it...
+A fork of the original [UNA](https://github.com/lua-gods/una); Flip the Deck, Change the Game!
+
+I mean it's literally just a card game's expansion, go play it...
 
 ## To join/leave a game lobby
+
 Click on the yellow `Join`/`Exit` card in the center
 
 ## How to play
-Plays exactly like the card game idk what to tell you
+
+Plays exactly like the card game except for these changes:
+
+
+Light Side:
+
+* Color +2 -> Color +1
+* Wild +4 -> Wild +2
+* New Flip Card to change between the "Light" and "Dark" sides
+
+
+Dark Side:
+
+* Light Side "+1" Becomes Dark Side "+5"
+* Light Side "Skip" Becomes Dark Side "Skip Everyone"
+* Light Side "Wild +2" Becomes Dark Side "Draw Color"
+
+
 The game will end once a player has gotten rid of all of their cards
 
+
 ## Host Settings
-* +2 on +4 stacking
-* +4 on +2 stacking
+
 * require playing drawn card
+* see opponent flip side
+* allow card stacking
 
-Scripting done by [GN](https://github.com/GN68), [Auria](https://github.com/auriafoxgirl)
+Base Una Scripting done by [GN](https://github.com/GN68), [Auria](https://github.com/auriafoxgirl)
 
-Models and textures done by [Toast](https://github.com/toasttextures)
+Base Una Models and textures done by [Toast](https://github.com/toasttextures)
+
+Una Flip Scripting done by Granbull (bim)
+
+Una Flip textures done by [RealMystl](https://github.com/RealMystl)
 
 ## Source: [Link](https://github.com/lua-gods/una)
 
 ## To download:
+
 Click on Code > Download Zip and drop that into your Figura Avatars folder
 
 Or use git clone inside of your Figura Avatars folder
+

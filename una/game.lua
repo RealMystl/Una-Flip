@@ -933,10 +933,20 @@ local sceneGame = Macro.new(function (events, ...)
 			cardsSorted[i] = cardId * 10000 + i
 		end
 		local cardHoverAnim = nil
+		local isFlipped = Sync.getBitFlag(3)
 		if name == "!" then
 			cardStackHeight = 0
 		else
-			table.sort(cardsSorted)
+			table.sort(cardsSorted, function(a, b)
+				local cardIdA = math.floor(a / 10000)
+				local cardIdB = math.floor(b / 10000)
+				local activeA = isFlipped and math.floor(cardIdA / 256) or (cardIdA % 256)
+				local activeB = isFlipped and math.floor(cardIdB / 256) or (cardIdB % 256)
+				if activeA == activeB then
+					return a < b
+				end
+				return activeA < activeB
+			end)
 			cardHoverAnim = "up"
 		end
 		-- update cards

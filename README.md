@@ -48,7 +48,7 @@ Una Flip textures done by [RealMystl](https://github.com/RealMystl)
 
 ## Known Issues
 
-* Light Side Colors are not sorted by color.
+N/A
 
 ## Base UNA Source: [Link](https://github.com/lua-gods/una)
 
